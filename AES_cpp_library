@@ -7,7 +7,58 @@
 #include <openssl/rand.h>
 
 class AESKeyManager {
-    // ... [Same as before]
+private:
+    // Assuming AES keys are represented as strings for simplicity.
+    std::vector<std::string> keys;
+    std::set<std::string> usedKeys;
+
+    // Random number generator
+    std::random_device rd;
+    std::mt19937 g;
+
+public:
+    AESKeyManager() : g(rd()) {}
+
+    // Add a new key to the library
+    void addKey(const std::string& key) {
+        if (usedKeys.find(key) == usedKeys.end()) {
+            keys.push_back(key);
+        }
+    }
+
+    // Sort the keys
+    void sortKeys() {
+        std::sort(keys.begin(), keys.end());
+    }
+
+    // Randomize the order of the keys
+    void randomizeKeys() {
+        std::shuffle(keys.begin(), keys.end(), g);
+    }
+
+    // Get the next key. This will mark the key as used and remove it from the list.
+    std::string getNextKey() {
+        if (keys.empty()) {
+            throw std::runtime_error("No more keys available");
+        }
+
+        std::string key = keys.back();
+        keys.pop_back();
+        usedKeys.insert(key);
+        return key;
+    }
+
+    // Check if a key has been used
+    bool isKeyUsed(const std::string& key) const {
+        return usedKeys.find(key) != usedKeys.end();
+    }
+
+    // Print all available keys
+    void printKeys() const {
+        for (const auto& key : keys) {
+            std::cout << key << std::endl;
+        }
+    }
 };
 
 class AESEncryption {
@@ -17,7 +68,7 @@ private:
 public:
     AESEncryption(AESKeyManager& manager) : keyManager(manager) {}
 
-    std::string encrypt(const std::string& plaintext) {
+    std::vector<unsigned char> encrypt(const std::string& plaintext) {
         std::string key = keyManager.getNextKey();
         if (key.empty()) {
             throw std::runtime_error("No available keys for encryption");
@@ -26,33 +77,31 @@ public:
         unsigned char iv[AES_BLOCK_SIZE];
         RAND_bytes(iv, AES_BLOCK_SIZE);
 
-        unsigned char ciphertext[plaintext.size() + AES_BLOCK_SIZE];
+        std::vector<unsigned char> ciphertext(plaintext.size() + AES_BLOCK_SIZE);
         int len;
 
         AES_KEY encryptKey;
         AES_set_encrypt_key((const unsigned char*)key.c_str(), 128, &encryptKey);
-        AES_cfb128_encrypt((const unsigned char*)plaintext.c_str(), ciphertext, plaintext.size(), &encryptKey, iv, &len, AES_ENCRYPT);
+        AES_cfb128_encrypt((const unsigned char*)plaintext.c_str(), ciphertext.data(), plaintext.size(), &encryptKey, iv, &len, AES_ENCRYPT);
 
-        // For simplicity, we're returning the ciphertext as a string.
-        // In a real-world scenario, you'd probably want to return it as a byte array or encode it in base64.
-        return std::string((char*)ciphertext, len);
+        ciphertext.resize(len);  // Resize to actual ciphertext length
+        return ciphertext;
     }
 
-    std::string decrypt(const std::string& ciphertext, const std::string& key) {
+    std::string decrypt(const std::vector<unsigned char>& ciphertext, const std::string& key) {
         unsigned char iv[AES_BLOCK_SIZE];
         RAND_bytes(iv, AES_BLOCK_SIZE);
 
-        unsigned char decryptedtext[ciphertext.size()];
+        std::vector<unsigned char> decryptedtext(ciphertext.size());
         int len;
 
         AES_KEY decryptKey;
         AES_set_decrypt_key((const unsigned char*)key.c_str(), 128, &decryptKey);
-        AES_cfb128_encrypt((const unsigned char*)ciphertext.c_str(), decryptedtext, ciphertext.size(), &decryptKey, iv, &len, AES_DECRYPT);
+        AES_cfb128_encrypt(ciphertext.data(), decryptedtext.data(), ciphertext.size(), &decryptKey, iv, &len, AES_DECRYPT);
 
-        return std::string((char*)decryptedtext, len);
+        return std::string(decryptedtext.begin(), decryptedtext.begin() + len);
     }
 };
-
 int main() {
     AESKeyManager manager;
     manager.addKey("key1");
@@ -62,8 +111,8 @@ int main() {
     AESEncryption aes(manager);
 
     std::string plaintext = "Hello, World!";
-    std::string encrypted = aes.encrypt(plaintext);
-    std::cout << "Encrypted: " << encrypted << std::endl;
+    std::vector<unsigned char> encrypted = aes.encrypt(plaintext);
+    std::cout << "Encrypted size: " << encrypted.size() << std::endl;
 
     // For demonstration purposes, we're using the same key for decryption.
     // In a real-world scenario, you'd manage keys differently.
