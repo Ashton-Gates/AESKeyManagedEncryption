@@ -1,0 +1,74 @@
+#include <iostream>
+#include <vector>
+#include <algorithm>
+#include <set>
+#include <random>
+#include <openssl/aes.h>
+#include <openssl/rand.h>
+
+class AESKeyManager {
+    // ... [Same as before]
+};
+
+class AESEncryption {
+private:
+    AESKeyManager& keyManager;
+
+public:
+    AESEncryption(AESKeyManager& manager) : keyManager(manager) {}
+
+    std::string encrypt(const std::string& plaintext) {
+        std::string key = keyManager.getNextKey();
+        if (key.empty()) {
+            throw std::runtime_error("No available keys for encryption");
+        }
+
+        unsigned char iv[AES_BLOCK_SIZE];
+        RAND_bytes(iv, AES_BLOCK_SIZE);
+
+        unsigned char ciphertext[plaintext.size() + AES_BLOCK_SIZE];
+        int len;
+
+        AES_KEY encryptKey;
+        AES_set_encrypt_key((const unsigned char*)key.c_str(), 128, &encryptKey);
+        AES_cfb128_encrypt((const unsigned char*)plaintext.c_str(), ciphertext, plaintext.size(), &encryptKey, iv, &len, AES_ENCRYPT);
+
+        // For simplicity, we're returning the ciphertext as a string.
+        // In a real-world scenario, you'd probably want to return it as a byte array or encode it in base64.
+        return std::string((char*)ciphertext, len);
+    }
+
+    std::string decrypt(const std::string& ciphertext, const std::string& key) {
+        unsigned char iv[AES_BLOCK_SIZE];
+        RAND_bytes(iv, AES_BLOCK_SIZE);
+
+        unsigned char decryptedtext[ciphertext.size()];
+        int len;
+
+        AES_KEY decryptKey;
+        AES_set_decrypt_key((const unsigned char*)key.c_str(), 128, &decryptKey);
+        AES_cfb128_encrypt((const unsigned char*)ciphertext.c_str(), decryptedtext, ciphertext.size(), &decryptKey, iv, &len, AES_DECRYPT);
+
+        return std::string((char*)decryptedtext, len);
+    }
+};
+
+int main() {
+    AESKeyManager manager;
+    manager.addKey("key1");
+    manager.addKey("key2");
+    manager.addKey("key3");
+
+    AESEncryption aes(manager);
+
+    std::string plaintext = "Hello, World!";
+    std::string encrypted = aes.encrypt(plaintext);
+    std::cout << "Encrypted: " << encrypted << std::endl;
+
+    // For demonstration purposes, we're using the same key for decryption.
+    // In a real-world scenario, you'd manage keys differently.
+    std::string decrypted = aes.decrypt(encrypted, "key1");
+    std::cout << "Decrypted: " << decrypted << std::endl;
+
+    return 0;
+}
